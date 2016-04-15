@@ -7,27 +7,25 @@ from scipy.integrate import odeint
 import numpy as np 
 import model_rates as mr
 
-
-x = np.arange(-5.01, 5.01, 0.1)
-y = np.arange(-5.01, 5.01, 0.1)
-xx, yy = np.meshgrid(x, y)
-z = np.sin(xx**2+yy**2)
-
-f = interpolate.interp2d(x, y, z, kind='cubic')
-
 import matplotlib.pyplot as plt
 
-xnew = np.arange(-5.01, 5.01, 0.2)
-ynew = np.arange(-5.01, 5.01, 0.2)
-znew = f( xnew , ynew )
-
-plt.plot(x, z[0, :], 'ro-', xnew, znew[0, :], 'b-')
-
-plt.show()
 
 
-
-a = np.linspace( mr.x0 , mr.x1 , 10,  endpoint=False )
+a = np.linspace( mr.x0 , mr.x1 , 30 ,  endpoint=False )
 b = np.linspace( 0, mr.tfinal , 100 )
 
-newdata  = mr. myfunc( a , b )
+newdata  = mr.myfunc( a , b )
+
+
+Ain, Aout, Fin, Fout, nu, N, dx = mr.initialization( 30 )
+mytime = np.linspace( 0 , mr.tfinal , 100 )
+y0 = mr.ICproj( N )
+
+data_generator = partial( mr.dataRHS , N=N , Ain=Ain , Aout=Aout , Fin=Fin , Fout=Fout )           
+mydata = odeint( data_generator , y0 , mytime )
+
+plt.close('all')
+plt.figure(0)
+dx1 = ( mr.x1 - mr.x0 ) / len(a)
+plt.plot( np.sum(  dx1 * newdata , axis=1) , color='b')
+plt.plot( np.sum(  dx * mydata , axis=1) , color='r')

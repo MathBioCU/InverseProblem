@@ -31,7 +31,7 @@ ncpus = 2
 x0 = 0
 x1 = 1
 
-tfinal = 1
+tfinal = 10
 
 
 #Ininitial guess for gamma function. Uniform distribution
@@ -58,7 +58,7 @@ def gam( y , x ):
 #Aggregation rate
 def aggregation( x , y ):
     
-    out = ( x ** ( 1/3 ) + y ** ( 1/3 ) ) **3 / (10**4)    
+    out = ( x ** ( 1/3 ) + y ** ( 1/3 ) ) **3 / (10**6)    
     #Should return a vector
     return out
 
@@ -67,19 +67,19 @@ def aggregation( x , y ):
 #Removal rate    
 def rem( x ):
      #Should return a vector
-     return 0.1 * x**(1/3)
+     return 1e-2*x**(1/3)
 
      
 #Fragmentation rate
 def fragm( x ):
     #Should return a vector
-    return  0.1 * x**(1/3)
+    return  1e-1 * x**(1/3)
 
 
 #Initial condition    
 def incond(x):
     
-    return 1000 * np.exp(-x)
+    return 1e4 * np.exp(x)
 
 
 
@@ -180,9 +180,11 @@ def dataRHS(y , t , N , Ain , Aout , Fin , Fout ):
 
 Ain, Aout, Fin, Fout, nu, N, dx = initialization( 1000 )
 mytime = np.linspace( 0 , tfinal , 1000 )
-y0 = ICproj( N )
+
+y0 = ICproj(N)
+
 data_generator = partial( dataRHS , N=N , Ain=Ain , Aout=Aout , Fin=Fin , Fout=Fout )           
 mydata = odeint( data_generator , y0 , mytime )
 
-myfunc = interpolate.interp2d( nu[1:] , mytime , mydata )
+myfunc = interpolate.interp2d( nu[:-1] , mytime , mydata )
 
