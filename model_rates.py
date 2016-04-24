@@ -10,9 +10,9 @@
 
 
 from __future__ import division
-from scipy.integrate import quad, odeint
+from scipy.integrate import quad, odeint, ode
 from scipy import interpolate
- 
+from scipy.special import beta 
 from functools import partial
 
 import scipy.linalg as lin
@@ -25,35 +25,43 @@ import numpy as np
     your machine.
 """
 
-ncpus = 2
 
 # Minimum and maximum floc sizes
 x0 = 0
 x1 = 1
+
+#Beta function parameters
+a = 5
+b = 1
+
+#initial guess
+c = 1
 
 tfinal = 10
 
 
 #Ininitial guess for gamma function. Uniform distribution
 
-def init_gam( y , x  ):
+def init_gam( y , x , c=c ):
     
-    out = 1 / x
+
+    out = y**(c-1) * ( x - y )**(c-1)  / ( x**(2*c-1) ) / beta( c , c )
     out[y>x] = 0
     
     return out    
 
 
 # Post-fragmentation density distribution
-def gam( y , x ):
+def gam( y , x , a=a, b=b):
     
-    out = 6*y * ( x - y )  / (x**3)
+    out = y**(a-1) * ( x - y )**(b-1)  / ( x**(a+b-1) ) / beta( a , b )
     
     if type(x) == np.ndarray or type(y) == np.ndarray:        
         out[y>x] = 0
-    #Should return a vector
+        out[ np.isnan(out) ] = 0    
+        out[ np.isinf(out) ] = 0  
+
     return out 
-    
 
 #Aggregation rate
 def aggregation( x , y ):
@@ -67,11 +75,12 @@ def aggregation( x , y ):
 #Removal rate    
 def rem( x ):
      #Should return a vector
-     return 1e-2*x**(1/3)
+     return 1e-3*x**(1/3)
 
      
 #Fragmentation rate
 def fragm( x ):
+    
     #Should return a vector
     return  1e-1 * x**(1/3)
 
@@ -79,7 +88,7 @@ def fragm( x ):
 #Initial condition    
 def incond(x):
     
-    return 1e4 * np.exp(x)
+    return 1e3 * np.exp( x )
 
 
 
@@ -95,7 +104,6 @@ def ICproj( N ):
          out[jj]= quad( incond , nu[jj] , nu[jj+1] ) [0] / dx
 
      return out           
-
 
     
 #Initializes uniform partition of (x0, x1) and approximate operator F_n
@@ -149,7 +157,23 @@ def initialization( N ):
 
 
 
-def odeRHS(y , t , P , N ,  Ain, Aout, Fout, nu , dx ):
+def odeRHS(y , t , Gamma , N ,  Ain, Aout, Fout, nu , dx ):
+    
+    """Approximate operator for the right hand side of the evolution equation"""
+   
+    Fin = dx * np.triu(Gamma.T , 1) * fragm( nu[range( 1 , N+1 ) ] )
+    
+    a = np.zeros_like(y)
+
+    a [ range( 1 , len( a ) ) ] = y [ range( len( y ) - 1 ) ]    
+
+
+    out = np.sum( Ain * y * lin.toeplitz( np.zeros_like(y) , a).T + 
+                  Fin * y - (Aout.T*y).T * y, axis = 1 ) - Fout * y   
+    return out
+
+
+def rk_odeRHS( t , y , P , N ,  Ain, Aout, Fout, nu , dx ):
     
     """Approximate operator for the right hand side of the evolution equation"""
    
@@ -164,6 +188,15 @@ def odeRHS(y , t , P , N ,  Ain, Aout, Fout, nu , dx ):
                   Fin * y - (Aout.T*y).T * y, axis = 1 ) - Fout * y   
     return out
 
+def rk_dataRHS(t , y , N , Ain , Aout , Fin , Fout ):
+   
+   
+    a = np.zeros_like(y)
+
+    a[range(1,len(a))] = y[range(len(y) - 1)]        
+    
+    return np.sum( Ain * lin.toeplitz( np.zeros_like(y) , a).T * y + Fin * y, axis = 1 ) - \
+           np.dot( (Aout.T*y).T , y )- Fout * y     
   
 def dataRHS(y , t , N , Ain , Aout , Fin , Fout ):
    
@@ -174,8 +207,24 @@ def dataRHS(y , t , N , Ain , Aout , Fin , Fout ):
     
     return np.sum( Ain * lin.toeplitz( np.zeros_like(y) , a).T * y + Fin * y, axis = 1 ) - \
            np.dot( (Aout.T*y).T , y )- Fout * y     
-   
+    
+    
+def rk_solver( func , y0 , mytime , args = () ):
 
+    
+    r = ode(func).set_integrator( 'dopri5', nsteps=1 , rtol=1e-5, atol=1e-5 )
+    
+    r.set_initial_value( y0 , mytime[0] ).set_f_params(*args)
+
+    yout = np.zeros( ( len(mytime) , len(y0) ) )
+    yout[0] = y0
+
+    #Note that it does not check if the integration is successfull at each time step
+    for nn in xrange( len(mytime) - 1 ):
+        r.integrate( mytime[nn+1])
+        yout[nn+1] = r.y
+           
+    return yout
 
 
 Ain, Aout, Fin, Fout, nu, N, dx = initialization( 1000 )
@@ -184,7 +233,14 @@ mytime = np.linspace( 0 , tfinal , 1000 )
 y0 = ICproj(N)
 
 data_generator = partial( dataRHS , N=N , Ain=Ain , Aout=Aout , Fin=Fin , Fout=Fout )           
-mydata = odeint( data_generator , y0 , mytime )
+mydata = odeint( data_generator , y0 , mytime ,  rtol=1e-6, atol=1e-6 )
+
+
+#Add some normally distributed error
+mu, sigma = 0, 1 # mean and standard deviation
+
+s = np.random.normal( mu , sigma , N*len(mytime) )
+mydata += s.reshape( ( len(mytime) , N ) )
 
 myfunc = interpolate.interp2d( nu[:-1] , mytime , mydata )
 
