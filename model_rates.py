@@ -237,7 +237,7 @@ mydata = odeint( data_generator , y0 , mytime ,  rtol=1e-6, atol=1e-6 )
 
 
 #Add some normally distributed error
-mu, sigma = 0, 1 # mean and standard deviation
+mu, sigma = 0, 20 # mean and standard deviation
 
 s = np.random.normal( mu , sigma , N*len(mytime) )
 mydata += s.reshape( ( len(mytime) , N ) )

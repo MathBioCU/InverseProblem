@@ -18,15 +18,20 @@ for file in os.listdir("data_files"):
     if file.endswith("cobyla.pkl"):
         fnames.append(file)
 
-pkl_file = open(os.path.join( 'data_files' , fnames[-1] ) , 'rb')
+
+myfile = fnames[1]
+
+ext = '_alpha_'+str( myfile[-12] )
+
+pkl_file = open(os.path.join( 'data_files' , myfile ) , 'rb')
 
 data = cPickle.load( pkl_file )        
 pkl_file.close()
 
 a = []
-
-# Total variance norm. See Gibbs and Su for the definition.
+# Total variance norm. See Gibbs and Su (2009) for the definition.
 tv_norm = np.zeros( len(data) )
+
 
 for cnum in range(len(data)):
     
@@ -37,9 +42,9 @@ for cnum in range(len(data)):
 a = np.asarray(a)
 
 
-f_fit = data[-1][-1]
-f_true = data[-1][-2]
-f_init = data[-1][-3]
+f_fit = data[-2][-1]
+f_true = data[-2][-2]
+f_init = data[-2][-3]
 
 
 plt.close('all')
@@ -58,7 +63,10 @@ plt.imshow(np.flipud(f_fit), interpolation='nearest', cmap=my_cmap , \
 cbar_ax = fig1.add_axes([0.85, 0.13, 0.03, 0.75])
 plt.colorbar(cax=cbar_ax)
 
-#plt.savefig( 'f_fit_beta.png', dpi=400 ) 
+
+fig_name = 'f_fit'+ext+'.png'
+
+plt.savefig( os.path.join( 'images' , fig_name ) , dpi=400 , bbox_inches='tight' ) 
 
 fig2 = plt.figure(2)
 
@@ -73,7 +81,8 @@ plt.imshow(np.flipud(f_true), interpolation='nearest', cmap=my_cmap , \
 cbar_ax = fig2.add_axes([0.85, 0.13, 0.03, 0.75])
 plt.colorbar(cax=cbar_ax)
 
-plt.savefig( 'f_true_beta.png', dpi=400 ) 
+fig_name = 'f_true'+ext+'.png'
+plt.savefig( os.path.join( 'images' , fig_name ) , dpi=400 , bbox_inches='tight' ) 
 
 
 fig3 = plt.figure(3)
@@ -81,15 +90,7 @@ fig3 = plt.figure(3)
 plt.title('Absolute error for $F_{0}$ and $F_{30}$', fontsize=16, y=1.04)
 
 
-np.seterr(all = 'ignore')
-
-## aa = np.abs( ((gamma_fit - gamma_true ).T / np.sum(gamma_true, axis = 1) ).T )
 aa =  np.abs( f_fit - f_true  )
-
-np.seterr(all = 'raise')
-
-aa [np.isnan(aa) ] = 0
-aa [np.isinf(aa) ] = 0
 
 imgplot = plt.imshow(np.flipud( aa )  , interpolation='nearest', cmap='Reds' , \
                vmin = 0, vmax = np.max( aa )  , extent=(0,1,0,1))
@@ -97,7 +98,13 @@ imgplot = plt.imshow(np.flipud( aa )  , interpolation='nearest', cmap='Reds' , \
 
 cbar_ax = fig3.add_axes([0.85, 0.13, 0.03, 0.75])
 plt.colorbar(cax=cbar_ax)      
-#plt.savefig('relative_error_beta.png', dpi = 400)
+
+plt.xlabel('$x$', fontsize=20)
+plt.ylabel('$y$', fontsize=20)
+
+
+fig_name = 'relative_error'+ext+'.png'
+plt.savefig( os.path.join( 'images' , fig_name ) , dpi=400 , bbox_inches='tight' ) 
 
 plt.figure(4)
 
@@ -105,10 +112,9 @@ plt.plot(a, tv_norm ,  color='blue', linewidth=2 )
 x1, x2, y1, y2 = plt.axis()
 plt.axis( (4.93, 30.07, y1, y2))
 plt.xticks( range(5, 31, 5) )
-plt.ylabel( '$\Vert F_{\mathrm{0}} - F_{N} \Vert_{\infty}$', fontsize=16 ) 
-plt.xlabel( '$N$', fontsize=16 )
-plt.title(' Error plot for the estimators $F_N$' , fontsize = 16)
 
+plt.ylabel( r'$\rho_{TV} \left ( F_{0} , \ F_{N} \right )$', fontsize=20 ) 
+plt.xlabel( '$N$', fontsize=20 )
 
 ## Finds and plots converging subsequence of the estimators
 
@@ -133,6 +139,9 @@ for mm in range(1, len(tv_norm)):
 cc = cc + 5        
 plt.plot(cc, bb, 'ro', linewidth=3)
 
+fig_name = 'tv_error'+ext+'.png'
+plt.savefig( os.path.join( 'images' , fig_name ) , dpi=400 , bbox_inches='tight' ) 
+
 plt.figure( 5 )
 
 grid = np.linspace( mr.x0 , mr.x1 , len(f_true) )
@@ -150,7 +159,6 @@ plt.ylabel('$F(x,\  \overline{x} / 2)$', fontsize=20)
 plt.xlabel('$x$', fontsize=20)
 plt.xticks( [0, 1] , ('$0$',  '$\overline{x}$'), fontsize=18 )
 
-
 plt.figure( 6 )
 
 mm = -1 
@@ -167,6 +175,8 @@ plt.xticks( [0, 1] , ('$0$',  '$\overline{x}$'), fontsize=18 )
 plt.axis([0 , 1, 0, 1.1] , fontsize=15)
 
 
+
+
 Gamma_fit = data[-1][-4]
 Ain, Aout, Fin, Fout, nu, N, dx = mr.initialization( data[-1][0] )    
 
@@ -175,3 +185,25 @@ xx , yy = np.meshgrid( nu[1:] , nu[1:] )
  # Initial guess of gamma function for the optimization   
 Gamma_true = mr.gam( xx , yy) 
 
+
+f, ax = plt.subplots(2, sharex=True)
+
+mm = int( data[-1][0] / 2  )
+
+ax[0].plot(  grid, f_true[ mm ] , color='b' , linewidth=2 , label='True' )
+ax[0].plot(  grid, f_fit[ mm ] , color='r'  , linewidth=2 , label='Fit')
+ax[0].set_ylim([0,1.1])
+ax[0].legend(loc='best')
+ax[0].set_ylabel('$F(x,\  0.5)$', fontsize=20)
+
+
+mm = -1 
+
+ax[1].plot(  grid, f_true[ mm ] , color='b' , linewidth=2 , label='True' )
+ax[1].plot(  grid, f_fit[ mm ] , color='r'  , linewidth=2 , label='Fit')
+ax[1].set_ylim([0,1.1])
+ax[1].set_xlabel('$x$', fontsize=20)
+ax[1].set_ylabel('$F(x,\  1.0)$', fontsize=20)
+
+fig_name = 'approximate_F'+ext+'.png'
+plt.savefig( os.path.join( 'images' , fig_name ) , dpi=400 , bbox_inches='tight' ) 

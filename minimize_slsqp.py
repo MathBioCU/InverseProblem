@@ -61,49 +61,38 @@ def estimator( nana ):
             yout = sol[0]
         else:
             yout = mr.rk_solver( myrk , y0 , t , args = ( Gamma , N ) )
-        """    
-        yout = mr.rk_solver( myrk , y0 , t , args = ( Gamma , N ) )
-        """    
             
         return  np.sum( ( yout - data ) **2 ) 
 
-     
+
+
     seed = init_P[ np.tril_indices(N) ]
     
-    def P2Gamma(P):
+    
+    def funeqcons(P, N=N, dx=dx):
         
         Gamma = np.zeros( ( N , N ) )
         Gamma[ np.tril_indices(N) ] = P
         
-        return 1 - dx*np.sum( Gamma , axis=1 )
+        return ( dx*np.sum( Gamma , axis=1 ) -1 )**2
+        
+    # Inequality constraints. In particlular, p_lm >=0 at each iteration
 
-    def neg_ineqs(j):
-        
-        return lambda P : P2Gamma(P)[j] 
-        
-    def pos_ineqs(j):
-        
-        return lambda P : -P2Gamma(P)[j] 
-        
-    def ineqs(j):
-        
-        return lambda P: P[j]
-    
- 
-    
-    ineq1 = [ neg_ineqs(j) for j in range(N ) ] 
-    ineq2 = [ pos_ineqs(j) for j in range(N)  ]
-    ineq3 = [ineqs(j) for j in range( len(seed) ) ]
-    
-    cons = ineq3 + ineq1# + ineq2
-    
+    def funineq(P, N=N):
 
-    res = fmin_cobyla( optim_func , seed, cons  , maxfun=10**4 , rhobeg=1 , rhoend=1)     
+        Gamma = np.zeros( ( N , N ) )
+        Gamma[ np.tril_indices(N) ] = P
+        
+        return P#np.concatenate ( (  1 - dx*np.sum( Gamma , axis=1 ) ,   dx*np.sum( Gamma , axis=1 ) -1 ) )
+    
+    res = fmin_slsqp( optim_func , seed , 
+                     f_ieqcons = funineq,
+                     f_eqcons =   funeqcons ,    
+                     full_output = 0 , epsilon = 1e-2 , iter=1000 , acc=1e0)
 
-
+     
     a = np.zeros( ( N , N ) )
     a[ np.tril_indices(N) ] = res
-
                   
     yout = odeint( myderiv , y0 , mytime , args = ( a , N ) )          
     
