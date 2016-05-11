@@ -41,36 +41,38 @@ def estimator( nana ):
 
     y0 = mr.ICproj( N )
                
-    data = mr.myfunc( nu[:-1] , mytime )
+    data = mr.interp_data( nu, mytime)
 
 
     # Same as data_generator, except for the Fin matrix
     myderiv = partial( mr.odeRHS , Ain=Ain, Aout=Aout, Fout=Fout, nu = nu, dx = dx)
-    myrk = partial( mr.rk_odeRHS , Ain=Ain, Aout=Aout, Fout=Fout, nu = nu, dx = dx)
-    
+  
     def optim_func( P, data=data, y0=y0, N=N , t=mytime):
         
         Gamma = np.zeros( ( N , N ) )
-        Gamma[ np.tril_indices(N) ] = P
+        Gamma[ np.tril_indices(N, -1) ] = P
+        
+        yout = odeint( myderiv , y0 , t , args=( Gamma , N ) , 
+              printmessg=False, rtol=1e-3, atol=1e-6 , full_output = False)
+
+        """
+        solver = odespy.BackwardEuler( myderiv , f_args=[ Gamma , N ] )
+        solver.set_initial_condition( y0 )
+        yout = solver.solve( t )[0] """
+        
+        fit =np.zeros_like( yout )
+        fit[: , 0] = dx* yout[:, 0]        
+        fit[: , 1:] = 0.5 * dx * ( yout[ : , :-1 ] + yout[:, 1:] )
+
+        return  np.sum( ( fit - data ) **2 ) 
+
+     
+    seed = init_P[ np.tril_indices(N, -1) ]
     
-        sol = odeint( myderiv , y0 , t , args=( Gamma , N ) , 
-                      printmessg=False, rtol=1e-5, atol=1e-5 , full_output = True)
-
-        if sol[1]['message'] == 'Integration successful.':
-            yout = sol[0]
-        else:
-            yout = mr.rk_solver( myrk , y0 , t , args = ( Gamma , N ) )
-
-        return  np.sum( ( yout - data ) **2 ) 
-
-   
-    seed = init_P[ np.tril_indices(N) ]
-
-
     def P2Gamma(P):
         
         Gamma = np.zeros( ( N , N ) )
-        Gamma[ np.tril_indices(N) ] = P
+        Gamma[ np.tril_indices(N,-1) ] = P
         
         return 1 - dx*np.sum( Gamma , axis=1 )
 
@@ -78,56 +80,41 @@ def estimator( nana ):
         
         return lambda P : P2Gamma(P)[j] 
         
-    def pos_ineqs(j):
-        
-        return lambda P : -P2Gamma(P)[j] 
-        
     def ineqs(j):
         
         return lambda P: P[j]
-    
- 
+     
     
     ineq1 = [ neg_ineqs(j) for j in range(N ) ] 
-    ineq2 = [ pos_ineqs(j) for j in range(N)  ]
-    ineq3 = [ineqs(j) for j in range( len(seed) ) ]
+    ineq2 = [ineqs(j) for j in range( len(seed) ) ]    
+    cons = ineq2 + ineq1
     
-    cons = ineq3 + ineq1 #+ ineq2
-    
-    if nana == 30:
-        res = fmin_cobyla( optim_func , seed, cons  , maxfun=3*10**4 , rhobeg=1 , rhoend=0.1)     
-    else:
-        res = fmin_cobyla( optim_func , seed, cons  , maxfun=10**4 , rhobeg=1 , rhoend=1)     
-    
-    a = np.zeros( ( N , N ) )
-    a[ np.tril_indices(N) ] = res
+    res = fmin_cobyla( optim_func , seed, cons  , maxfun=10000 , rhobeg=1 , rhoend=1)     
+
+    G_fit = np.zeros( ( N , N ) )
+    G_fit[ np.tril_indices(N,-1) ] = res
+
                   
-    yout = odeint( myderiv , y0 , mytime , args = ( a , N ) )          
+    yout = odeint( myderiv , y0 , mytime , args = ( G_fit , N ) )          
     
     data_error =  np.linalg.norm( yout - data , np.inf ) / np.linalg.norm( data , np.inf )    
 
     f_fit = np.zeros( ( N , N ) )
-    f_fit  = dx * a
+    f_fit  = np.cumsum( dx * G_fit, axis=1)
+    f_fit[np.triu_indices(N) ]  = 1
+
     
     f_true = np.zeros( ( N , N ) )    
     true_P = mr.gam( xx , yy )
-    f_true  = dx * true_P
+    f_true  =np.cumsum( dx * true_P , axis=1)
+    f_true[np.triu_indices(N) ]  = 1
     
     f_init = np.zeros( ( N , N ) ) 
-    f_init = dx * init_P
+    f_init = np.cumsum( dx * init_P , axis=1)
+    f_init[np.triu_indices(N) ]  = 1 
 
-    for col in range(1,  nana ):
-        
-        f_fit[:, col ] = f_fit[:, col - 1 ] + dx * a[:, col]
-        f_init[:, col ] = f_init[:, col - 1 ] + dx * init_P[:, col]
-        f_true[:, col ] = f_true[:, col - 1 ] + dx * true_P[:, col]
     
-    f_true[np.triu_indices(N) ]  = 1
-    f_fit[np.triu_indices(N) ]  = 1
-    
-    f_error  = np.max ( np.abs( f_fit - f_true ) ) 
-    
-    return (nana, data_error, f_error, a , f_init, f_true, f_fit)
+    return (nana, data_error,  res , f_init, f_true, f_fit)
 
 """
 if __name__ == '__main__':

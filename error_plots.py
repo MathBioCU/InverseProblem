@@ -19,7 +19,7 @@ for file in os.listdir("data_files"):
         fnames.append(file)
 
 
-myfile = fnames[1]
+myfile = fnames[-2]
 
 ext = '_alpha_'+str( myfile[-12] )
 
@@ -31,20 +31,25 @@ pkl_file.close()
 a = []
 # Total variance norm. See Gibbs and Su (2009) for the definition.
 tv_norm = np.zeros( len(data) )
+var_norm = np.zeros( len(data) )
+
+sup_norm = np.zeros( len(data) )
 
 
 for cnum in range(len(data)):
     
     a.append( data[cnum][0] )
     dx = ( mr.x1 - mr.x0 ) / data[cnum][0]
-    tv_norm[cnum] = np.sum ( np.abs( data[cnum][-2]-data[cnum][-1] ) ) * (dx**2) / 2
+    tv_norm[cnum] = np.sum ( np.abs( data[cnum][-2]-data[cnum][-1] ) ) * (dx**2) 
+    var_norm[cnum] = np.max (  np.sum(  np.abs( data[cnum][-2]-data[cnum][-1] ) , axis=1 ) ) * dx
+    sup_norm[cnum] =  np.sum( np.max (  np.abs ( data[cnum][-2]-data[cnum][-1] ) , axis=1 ) ) *dx
     
-a = np.asarray(a)
+a = np.asarray( a )
+#tv_norm = var_norm
 
-
-f_fit = data[-2][-1]
-f_true = data[-2][-2]
-f_init = data[-2][-3]
+f_fit = data[-1][-1]
+f_true = data[-1][-2]
+f_init = data[-1][-3]
 
 
 plt.close('all')
@@ -207,3 +212,42 @@ ax[1].set_ylabel('$F(x,\  1.0)$', fontsize=20)
 
 fig_name = 'approximate_F'+ext+'.png'
 plt.savefig( os.path.join( 'images' , fig_name ) , dpi=400 , bbox_inches='tight' ) 
+
+
+
+fig = plt.figure(8)
+ax = fig.add_subplot(111)
+
+dimens = 1/a 
+conv_error = tv_norm
+
+ax.loglog( dimens ,  conv_error , linewidth=0, color='blue', marker='o', markersize=5 )
+ax.loglog( 1 / cc ,  bb , linewidth=0, color='red', marker='o', markersize=5 )
+        
+
+# Line in fit in loglog plot
+logx = np.log( 1 / cc )
+logy = np.log( bb )
+
+coeffs = np.polyfit( logx , logy , deg=1 )
+
+lin_fit = np.poly1d( coeffs )
+
+line_x = np.log( np.linspace( dimens[0] , dimens[-1] ) )
+line_y =  np.exp( lin_fit( line_x ) ) 
+ax.loglog( np.exp( line_x ) ,   line_y   , linewidth=1 , color='black')
+
+
+mytext = 'Slope =$'+str( round(coeffs[0] , 1) ) + '$'
+
+ax.text(0.7, 0.9,  mytext , style='italic',
+        bbox={'facecolor':'#87CEFA', 'alpha':0.5, 'pad':10} , 
+        transform=ax.transAxes, fontsize = 20 )
+ax.set_ylabel( r'$\rho_{\mathrm{TV}} \left ( F_{0} , \ F_{N} \right )$', fontsize=20 ) 
+ax.set_xlabel( '$1/N$', fontsize=20 )
+
+
+fig_name = 'log_error'+ext+'.png'
+plt.savefig( os.path.join( 'images' , fig_name ) , dpi=400 , bbox_inches='tight' ) 
+
+        

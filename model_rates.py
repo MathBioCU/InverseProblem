@@ -31,8 +31,8 @@ x0 = 0
 x1 = 1
 
 #Beta function parameters
-a = 5
-b = 1
+a = 2
+b = 2
 
 #initial guess
 c = 1
@@ -54,7 +54,7 @@ def init_gam( y , x , c=c ):
 # Post-fragmentation density distribution
 def gam( y , x , a=a, b=b):
     
-    out = y**(a-1) * ( x - y )**(b-1)  / ( x**(a+b-1) ) / beta( a , b )
+    out = y**(a-1) * ( np.abs( x - y )**(b-1) )  / ( x**(a+b-1) ) / beta( a , b )
     
     if type(x) == np.ndarray or type(y) == np.ndarray:        
         out[y>x] = 0
@@ -173,6 +173,18 @@ def odeRHS(y , t , Gamma , N ,  Ain, Aout, Fout, nu , dx ):
     return out
 
 
+def dataRHS(y , t , N , Ain , Aout , Fin , Fout ):
+   
+   
+    a = np.zeros_like(y)
+
+    a[range(1,len(a))] = y[range(len(y) - 1)]        
+    
+    return np.sum( Ain * lin.toeplitz( np.zeros_like(y) , a).T * y + Fin * y, axis = 1 ) - \
+           np.dot( (Aout.T*y).T , y )- Fout * y     
+    
+ 
+ 
 def rk_odeRHS( t , y , P , N ,  Ain, Aout, Fout, nu , dx ):
     
     """Approximate operator for the right hand side of the evolution equation"""
@@ -198,21 +210,11 @@ def rk_dataRHS(t , y , N , Ain , Aout , Fin , Fout ):
     return np.sum( Ain * lin.toeplitz( np.zeros_like(y) , a).T * y + Fin * y, axis = 1 ) - \
            np.dot( (Aout.T*y).T , y )- Fout * y     
   
-def dataRHS(y , t , N , Ain , Aout , Fin , Fout ):
    
-   
-    a = np.zeros_like(y)
-
-    a[range(1,len(a))] = y[range(len(y) - 1)]        
-    
-    return np.sum( Ain * lin.toeplitz( np.zeros_like(y) , a).T * y + Fin * y, axis = 1 ) - \
-           np.dot( (Aout.T*y).T , y )- Fout * y     
-    
-    
 def rk_solver( func , y0 , mytime , args = () ):
 
     
-    r = ode(func).set_integrator( 'dopri5', nsteps=1 , rtol=1e-5, atol=1e-5 )
+    r = ode(func).set_integrator( 'dopri5', rtol=1e-1, atol=1e-1 )
     
     r.set_initial_value( y0 , mytime[0] ).set_f_params(*args)
 
@@ -227,20 +229,42 @@ def rk_solver( func , y0 , mytime , args = () ):
     return yout
 
 
-Ain, Aout, Fin, Fout, nu, N, dx = initialization( 1000 )
-mytime = np.linspace( 0 , tfinal , 1000 )
+def reverse_cumsum(arr):
+    out = np.zeros_like(arr)
+    out[:,0] = arr[:,0]
+    out[:, 1:] = np.diff( arr , axis=1 )
+    return out
+
+fine_N = 1000
+Ain, Aout, Fin, Fout, nu, N, dx = initialization( fine_N )
+mytime = np.linspace( 0 , tfinal , 10000 )
 
 y0 = ICproj(N)
 
 data_generator = partial( dataRHS , N=N , Ain=Ain , Aout=Aout , Fin=Fin , Fout=Fout )           
-mydata = odeint( data_generator , y0 , mytime ,  rtol=1e-6, atol=1e-6 )
+mydata = odeint( data_generator , y0 , mytime ,  rtol=1e-5, atol=1e-5 )
 
-
-#Add some normally distributed error
-mu, sigma = 0, 20 # mean and standard deviation
-
-s = np.random.normal( mu , sigma , N*len(mytime) )
-mydata += s.reshape( ( len(mytime) , N ) )
 
 myfunc = interpolate.interp2d( nu[:-1] , mytime , mydata )
+
+
+def interp_data( nu , mytime):
+
+    data = np.zeros( ( len(mytime) , len(nu) - 1 ) )
+    
+    for mm in range( len(nu) - 1):
+        
+        int_grid = np.linspace( nu[mm] , nu[mm+1] )
+        
+        data[ : , mm] = np.trapz( myfunc( int_grid , mytime ) , int_grid , axis=1 )
+        
+    #Add some normally distributed error
+    mu, sigma = 0, 1 # mean and standard deviation
+    
+    s = np.random.normal( mu , sigma , data.shape )
+    data += s
+    
+    return data
+
+
 

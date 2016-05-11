@@ -2,7 +2,7 @@
 from __future__ import division
 from scipy import interpolate
 from functools import partial
-from scipy.integrate import odeint
+from scipy.integrate import odeint, cumtrapz, quad
 
 import numpy as np 
 import model_rates as mr
@@ -27,6 +27,16 @@ start  = time.time()
 data_generator = partial( mr.dataRHS , N=N , Ain=Ain , Aout=Aout , Fin=Fin , Fout=Fout )           
 mydata = odeint( data_generator , y0 , mytime , full_output=True)
 
+
+import odespy
+
+#solver = odespy.Vode( data_generator , adams_or_bdf='bdf', order=1)
+solver = odespy.BackwardEuler( data_generator)
+
+solver.set_initial_condition( y0 )
+
+u, t = solver.solve( mytime )
+
 end = time.time()
 print round( end -start , 3)
 
@@ -47,3 +57,26 @@ plt.plot( np.sum(  dx * mydata[0] , axis=1) , color='r')
 
 mu, sigma = 0, 1 # mean and standard deviation
 s = np.random.normal(mu, sigma, 1000)
+
+
+Ain, Aout, Fin, Fout, nu, N, dx = mr.initialization( 30 )    
+
+mytime = np.linspace( 0 , mr.tfinal , 50 )
+y0 = mr.ICproj( N )
+
+data_generator = partial( mr.dataRHS , N=N , Ain=Ain , Aout=Aout , Fin=Fin , Fout=Fout )           
+yout = odeint( data_generator , y0 , mytime , full_output=True)[0]
+
+sol = 0.5 * dx * ( yout[ : , :-1 ] + yout[:, 1:] )
+
+mmm_data = mr.interp_data( nu, mytime)
+
+
+
+xx , yy = np.meshgrid( nu[1:] , nu[1:] )
+ 
+ # Initial guess of gamma function for the optimization   
+init_P = mr.gam( xx , yy)    
+
+  
+    
