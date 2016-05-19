@@ -26,69 +26,29 @@ start = time.time()
 
 print 'Start time', time.strftime( "%H:%M" , time.localtime() )
 
-#==============================================================================
-# Generate data
-#==============================================================================
+#Initialization of the matrices required for the simulations
 
-fine_N = 1000
-
-fine_t = 10000
-
-tfinal = 20
-
-Ain, Aout, Fin, Fout, nu, N, dx = mr.initialization( fine_N )
-mytime = np.linspace( 0 , tfinal , fine_t )
-
-y0 = mr.ICproj( N )
-
-data_generator = partial( mr.dataRHS , N=N , Ain=Ain , Aout=Aout , Fin=Fin , Fout=Fout )           
-mydata = odeint( data_generator , y0 , mytime ,  rtol=1e-6, atol=1e-6 )
-
-interp_x  = np.linspace( mr.x0 , mr.x1 , fine_N )
-interp_func = interpolate.interp2d( interp_x , mytime , mydata )
-
-
-def interp_data( nu , mytime , mu=0 , sigma=20 ):
-
-    data = np.zeros( ( len(mytime) , len(nu) - 1 ) )
-    
-    for mm in range( len(nu) - 1):
-        
-        int_grid = np.linspace( nu[mm] , nu[mm+1] )
-        
-        data[ : , mm] = np.trapz( interp_func( int_grid , mytime ) , int_grid , axis=1 )
-        
-    #Add some normally distributed error
-    if sigma>0:    
-        noise = np.random.normal( mu , sigma , data.shape )
-        data += noise
-        
-    return data
-
-
-def estimator( tfinal ):
-    
+def estimator( sigma ):
     #Definition of the left part of the system of ODE
     Ain, Aout, Fin, Fout, nu, N, dx = mr.initialization( 30 )    
 
     xx , yy = np.meshgrid( nu[1:] , nu[1:] )
  
-    # Initial guess of gamma function for the optimization   
+     # Initial guess of gamma function for the optimization   
     init_P = mr.init_gam( xx , yy)    
     
     
-    data_t = np.linspace(0, tfinal , 20)
+    data_t = np.linspace( 0 , mr.tfinal , 20 )
     data_x = np.linspace( mr.x0 , mr.x1 , 11)
- 
-               
-    data = interp_data( data_x , data_t)
+                
+    data = mr.interp_data( data_x , data_t , sigma=sigma)
     
     
     # Same as data_generator, except for the Fin matrix
     myderiv = partial( mr.odeRHS , Ain=Ain, Aout=Aout, Fout=Fout, nu = nu, dx = dx)
 
     y0 = mr.ICproj( N )
-    mytime = np.linspace( 0 , tfinal , 100 ) 
+    mytime = np.linspace( 0 , mr.tfinal , 100 ) 
   
     def optim_func( P, data=data, y0=y0, N=N , t=mytime ,  data_x = data_x , data_t = data_t):
         
@@ -148,27 +108,26 @@ def estimator( tfinal ):
     
     f_true = np.zeros( ( N , N ) )    
     true_P = mr.gam( xx , yy )
-    f_true  =np.cumsum( dx * true_P , axis = 1 )
+    f_true  =np.cumsum( dx * true_P , axis=1)
     f_true[np.triu_indices(N) ]  = 1
     
     f_init = np.zeros( ( N , N ) ) 
-    f_init = np.cumsum( dx * init_P , axis = 1)
+    f_init = np.cumsum( dx * init_P , axis=1)
     f_init[np.triu_indices(N) ]  = 1 
 
-    cost_func = optim_func( res )
     
-    return (tfinal,  res , cost_func ,  f_init, f_true, f_fit)
+    return (sigma,  res , f_init, f_true, f_fit)
     
 
 if __name__ == '__main__':
     
     pool = Pool( processes = 10 )
-    ey_nana = np.linspace(1, 20, 20)
+    ey_nana =  np.linspace(0, 50 , 20)
 
     result = pool.map(estimator, ey_nana)
     
-    fname = 'data_' + time.strftime( "%m_%d_%H_%M_" , time.localtime() ) + str(mr.a) + '_cobyla.pkl'   
-    output_file = open( os.path.join( 'data_files' , fname ) , 'wb' )
-    cPickle.dump( result , output_file )
-    output_file.close( )
+    fname = 'data_' + time.strftime( "%m_%d_%H_%M_" , time.localtime() ) + str(mr.a) + '_noise.pkl'   
+    output_file = open( os.path.join( 'data_files' , fname ) , 'wb')
+    cPickle.dump(result, output_file)
+    output_file.close()
 

@@ -37,8 +37,6 @@ b = 2
 #initial guess
 c = 1
 
-tfinal = 10
-
 
 #Ininitial guess for gamma function. Uniform distribution
 
@@ -154,9 +152,6 @@ def initialization( N ):
     return ( Ain , Aout , Fin, Fout ,  nu , N , dx)
 
 
-
-
-
 def odeRHS(y , t , Gamma , N ,  Ain, Aout, Fout, nu , dx ):
     
     """Approximate operator for the right hand side of the evolution equation"""
@@ -183,72 +178,38 @@ def dataRHS(y , t , N , Ain , Aout , Fin , Fout ):
     return np.sum( Ain * lin.toeplitz( np.zeros_like(y) , a).T * y + Fin * y, axis = 1 ) - \
            np.dot( (Aout.T*y).T , y )- Fout * y     
     
- 
- 
-def rk_odeRHS( t , y , P , N ,  Ain, Aout, Fout, nu , dx ):
-    
-    """Approximate operator for the right hand side of the evolution equation"""
-   
-    Fin = dx * np.triu(P.T , 1) * fragm( nu[range( 1 , N+1 ) ] )
-    
-    a = np.zeros_like(y)
-
-    a [ range( 1 , len( a ) ) ] = y [ range( len( y ) - 1 ) ]    
-
-
-    out = np.sum( Ain * y * lin.toeplitz( np.zeros_like(y) , a).T + 
-                  Fin * y - (Aout.T*y).T * y, axis = 1 ) - Fout * y   
-    return out
-
-def rk_dataRHS(t , y , N , Ain , Aout , Fin , Fout ):
-   
-   
-    a = np.zeros_like(y)
-
-    a[range(1,len(a))] = y[range(len(y) - 1)]        
-    
-    return np.sum( Ain * lin.toeplitz( np.zeros_like(y) , a).T * y + Fin * y, axis = 1 ) - \
-           np.dot( (Aout.T*y).T , y )- Fout * y     
-  
-   
-def rk_solver( func , y0 , mytime , args = () ):
-
-    
-    r = ode(func).set_integrator( 'dopri5', rtol=1e-1, atol=1e-1 )
-    
-    r.set_initial_value( y0 , mytime[0] ).set_f_params(*args)
-
-    yout = np.zeros( ( len(mytime) , len(y0) ) )
-    yout[0] = y0
-
-    #Note that it does not check if the integration is successfull at each time step
-    for nn in xrange( len(mytime) - 1 ):
-        r.integrate( mytime[nn+1])
-        yout[nn+1] = r.y
-           
-    return yout
-
 
 def reverse_cumsum(arr):
     out = np.zeros_like(arr)
     out[:,0] = arr[:,0]
     out[:, 1:] = np.diff( arr , axis=1 )
     return out
+    
+ 
+
+#==============================================================================
+# Generate data
+#==============================================================================
 
 fine_N = 1000
-Ain, Aout, Fin, Fout, nu, N, dx = initialization( fine_N )
-mytime = np.linspace( 0 , tfinal , 10000 )
 
-y0 = ICproj(N)
+fine_t = 10000
+
+tfinal = 10
+
+Ain, Aout, Fin, Fout, nu, N, dx = initialization( fine_N )
+mytime = np.linspace( 0 , tfinal , fine_t )
+
+y0 = ICproj( N )
 
 data_generator = partial( dataRHS , N=N , Ain=Ain , Aout=Aout , Fin=Fin , Fout=Fout )           
-mydata = odeint( data_generator , y0 , mytime ,  rtol=1e-5, atol=1e-5 )
+mydata = odeint( data_generator , y0 , mytime ,  rtol=1e-6, atol=1e-6 )
+
+interp_x  = np.linspace( x0 , x1 , fine_N )
+interp_func = interpolate.interp2d( interp_x , mytime , mydata )
 
 
-myfunc = interpolate.interp2d( nu[:-1] , mytime , mydata )
-
-
-def interp_data( nu , mytime):
+def interp_data( nu , mytime , mu=0 , sigma=20 ):
 
     data = np.zeros( ( len(mytime) , len(nu) - 1 ) )
     
@@ -256,15 +217,13 @@ def interp_data( nu , mytime):
         
         int_grid = np.linspace( nu[mm] , nu[mm+1] )
         
-        data[ : , mm] = np.trapz( myfunc( int_grid , mytime ) , int_grid , axis=1 )
+        data[ : , mm] = np.trapz( interp_func( int_grid , mytime ) , int_grid , axis=1 )
         
     #Add some normally distributed error
-    mu, sigma = 0, 1 # mean and standard deviation
-    
-    s = np.random.normal( mu , sigma , data.shape )
-    data += s
-    
+    if sigma>0:    
+        noise = np.random.normal( mu , sigma , data.shape )
+        data += noise
+        
     return data
 
-
-
+   

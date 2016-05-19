@@ -17,54 +17,111 @@ import pickle
 import model_rates as mr
 import odespy
 
+from scipy import interpolate
 from functools import partial
 from multiprocessing import Pool
 from matplotlib import gridspec
 from scipy.integrate import odeint
-from scipy.optimize import fmin_slsqp ,  fmin_cobyla, minimize
+from scipy.optimize import   fmin_cobyla
 
 
 
 start = time.time()
 
+print 'Start time', time.strftime( "%H:%M" , time.localtime() )
 
 #Initialization of the matrices required for the simulations
 
-def estimator( nana ):
+#==============================================================================
+# Generate data
+#==============================================================================
+
+fine_N = 1000
+
+fine_t = 10000
+
+tfinal = 20
+
+Ain, Aout, Fin, Fout, nu, N, dx = mr.initialization( fine_N )
+mytime = np.linspace( 0 , tfinal , fine_t )
+
+y0 = mr.ICproj( N )
+
+data_generator = partial( mr.dataRHS , N=N , Ain=Ain , Aout=Aout , Fin=Fin , Fout=Fout )           
+mydata = odeint( data_generator , y0 , mytime ,  rtol=1e-6, atol=1e-6 )
+
+interp_x  = np.linspace( mr.x0 , mr.x1 , fine_N )
+interp_func = interpolate.interp2d( interp_x , mytime , mydata )
+
+
+def interp_data( nu , mytime , mu=0 , sigma=20 ):
+
+    data = np.zeros( ( len(mytime) , len(nu) - 1 ) )
+    
+    for mm in range( len(nu) - 1):
+        
+        int_grid = np.linspace( nu[mm] , nu[mm+1] )
+        
+        data[ : , mm] = np.trapz( interp_func( int_grid , mytime ) , int_grid , axis=1 )
+        
+    #Add some normally distributed error
+    if sigma>0:    
+        noise = np.random.normal( mu , sigma , data.shape )
+        data += noise
+        
+    return data
+
+
+def estimator( tfinal ):
+    
     #Definition of the left part of the system of ODE
-    Ain, Aout, Fin, Fout, nu, N, dx = mr.initialization( nana )    
+    Ain, Aout, Fin, Fout, nu, N, dx = mr.initialization( 30 )    
 
     xx , yy = np.meshgrid( nu[1:] , nu[1:] )
  
-     # Initial guess of gamma function for the optimization   
+    # Initial guess of gamma function for the optimization   
     init_P = mr.init_gam( xx , yy)    
     
-    mytime = np.linspace(0, mr.tfinal , 50 + nana)
-
-    y0 = mr.ICproj( N )
+    
+    data_t = np.linspace(0, tfinal , 20)
+    data_x = np.linspace( mr.x0 , mr.x1 , 11)
+ 
                
-    data = mr.interp_data( nu, mytime)
-
-
+    data = interp_data( data_x , data_t)
+    
+    
     # Same as data_generator, except for the Fin matrix
     myderiv = partial( mr.odeRHS , Ain=Ain, Aout=Aout, Fout=Fout, nu = nu, dx = dx)
+
+    y0 = mr.ICproj( N )
+    mytime = np.linspace( 0 , tfinal , 100 ) 
   
-    def optim_func( P, data=data, y0=y0, N=N , t=mytime):
+    def optim_func( P, data=data, y0=y0, N=N , t=mytime ,  data_x = data_x , data_t = data_t):
         
         Gamma = np.zeros( ( N , N ) )
         Gamma[ np.tril_indices(N, -1) ] = P
         
         yout = odeint( myderiv , y0 , t , args=( Gamma , N ) , 
-              printmessg=False, rtol=1e-3, atol=1e-6 , full_output = False)
+              printmessg=False, rtol=1e-3, atol=1e-5 , full_output = False)
+        
+        
+        interp_x = np.linspace(mr.x0 , mr.x1 , N)
+        func = interpolate.interp2d( interp_x , t , yout )
+
+
+        fit = np.zeros_like( data )
+    
+        for mm in range( len(data_x) - 1):
+            
+            int_grid = np.linspace( data_x[mm] , data_x[mm+1] , 10)
+            
+            fit[ : , mm] = np.trapz( func( int_grid , data_t ) , int_grid , axis=1 )
 
         """
         solver = odespy.BackwardEuler( myderiv , f_args=[ Gamma , N ] )
         solver.set_initial_condition( y0 )
         yout = solver.solve( t )[0] """
         
-        fit =np.zeros_like( yout )
-        fit[: , 0] = dx* yout[:, 0]        
-        fit[: , 1:] = 0.5 * dx * ( yout[ : , :-1 ] + yout[:, 1:] )
 
         return  np.sum( ( fit - data ) **2 ) 
 
@@ -96,11 +153,6 @@ def estimator( nana ):
     G_fit = np.zeros( ( N , N ) )
     G_fit[ np.tril_indices(N,-1) ] = res
 
-                  
-    yout = odeint( myderiv , y0 , mytime , args = ( G_fit , N ) )          
-    
-    data_error =  np.linalg.norm( yout - data , np.inf ) / np.linalg.norm( data , np.inf )    
-
     f_fit = np.zeros( ( N , N ) )
     f_fit  = np.cumsum( dx * G_fit, axis=1)
     f_fit[np.triu_indices(N) ]  = 1
@@ -115,11 +167,12 @@ def estimator( nana ):
     f_init = np.cumsum( dx * init_P , axis=1)
     f_init[np.triu_indices(N) ]  = 1 
 
+    cost_func = optim_func( res )
     
-    return (nana, data_error,  res , f_init, f_true, f_fit)
+    return (tfinal,  res , cost_func ,  f_init, f_true, f_fit)
 
 
-result = estimator( 20 )
+result = estimator( 10 )
 
 end = time.time()
 
