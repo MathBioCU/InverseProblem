@@ -3,14 +3,13 @@
 #@author: Inom Mirzaev
 
 """
-    Model rates and parameters used for generation of existence and stability maps
-    of the population balance equations (PBEs) (see Mirzaev, I., & Bortz, D. M. (2015). 
-    arXiv:1507.07127 ). 
+    Model rates and parameters used for identifying conditional probability measures. 
+    See Bortz, D. M., Byrne C. E. and Mirzaev, I. (2016). 
 """
 
 
 from __future__ import division
-from scipy.integrate import quad, odeint, ode
+from scipy.integrate import quad, odeint
 from scipy import interpolate
 from scipy.special import beta 
 from functools import partial
@@ -19,29 +18,21 @@ import scipy.linalg as lin
 import numpy as np
 
 
-"""
-    Number of CPUs used for computation of existence and stability regions.
-    For faster computation number of CPUs should be set to the number of cores available on
-    your machine.
-"""
-
 
 # Minimum and maximum floc sizes
 x0 = 0
 x1 = 1
 
 #Beta function parameters
-a = 2
-b = 2
+a = 5
+b = 1
 
 #initial guess
 c = 1
 
-
-#Ininitial guess for gamma function. Uniform distribution
-
 def init_gam( y , x , c=c ):
     
+    """Ininitial guess for gamma function. Uniform distribution"""    
 
     out = y**(c-1) * ( x - y )**(c-1)  / ( x**(2*c-1) ) / beta( c , c )
     out[y>x] = 0
@@ -49,9 +40,11 @@ def init_gam( y , x , c=c ):
     return out    
 
 
-# Post-fragmentation density distribution
 def gam( y , x , a=a, b=b):
     
+    """True post-fragmentation density distribution
+       used for data generation."""
+       
     out = y**(a-1) * ( np.abs( x - y )**(b-1) )  / ( x**(a+b-1) ) / beta( a , b )
     
     if type(x) == np.ndarray or type(y) == np.ndarray:        
@@ -61,31 +54,30 @@ def gam( y , x , a=a, b=b):
 
     return out 
 
-#Aggregation rate
 def aggregation( x , y ):
-    
+ 
+    """Aggregation rate"""   
     out = ( x ** ( 1/3 ) + y ** ( 1/3 ) ) **3 / (10**6)    
     #Should return a vector
     return out
 
 
     
-#Removal rate    
+    
 def rem( x ):
+     """Removal rate"""
      #Should return a vector
      return 1e-3*x**(1/3)
 
      
-#Fragmentation rate
 def fragm( x ):
-    
+    """Fragmentation rate"""   
     #Should return a vector
     return  1e-1 * x**(1/3)
 
-
-#Initial condition    
-def incond(x):
     
+def incond(x):
+    """Initial condition"""   
     return 1e3 * np.exp( x )
 
 
@@ -104,9 +96,10 @@ def ICproj( N ):
      return out           
 
     
-#Initializes uniform partition of (x0, x1) and approximate operator F_n
+
 def initialization( N ):
     
+    """Initializes uniform partition of (x0, x1) and approximate operator F_n"""    
     #delta x
     dx = ( x1 - x0 ) / N
     
@@ -170,7 +163,7 @@ def odeRHS(y , t , Gamma , N ,  Ain, Aout, Fout, nu , dx ):
 
 def dataRHS(y , t , N , Ain , Aout , Fin , Fout ):
    
-   
+    """RHS of the ode used for data generation"""
     a = np.zeros_like(y)
 
     a[range(1,len(a))] = y[range(len(y) - 1)]        
@@ -180,6 +173,8 @@ def dataRHS(y , t , N , Ain , Aout , Fin , Fout ):
     
 
 def reverse_cumsum(arr):
+    
+    """Given a matrix each row cdf of some pdf, converts cdf to pdf for each row"""
     out = np.zeros_like(arr)
     out[:,0] = arr[:,0]
     out[:, 1:] = np.diff( arr , axis=1 )
@@ -191,8 +186,10 @@ def reverse_cumsum(arr):
 # Generate data
 #==============================================================================
 
+#Fine grid x used for data generation
 fine_N = 1000
 
+#Fine grid t used for data generation
 fine_t = 10000
 
 tfinal = 10
@@ -211,6 +208,8 @@ interp_func = interpolate.interp2d( interp_x , mytime , mydata )
 
 def interp_data( nu , mytime , mu=0 , sigma=20 ):
 
+    """Interpolates the data to the given grid nu and mytime"""
+    
     data = np.zeros( ( len(mytime) , len(nu) - 1 ) )
     
     for mm in range( len(nu) - 1):

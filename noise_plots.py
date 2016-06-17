@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sun Aug 30 17:04:00 2015
+Created on May 16, 2016
 
-@author: Inom
+@author: Inom Mirzaev
+
+Plots the generated data from noise_effect.py.
+
 """
 
 from __future__ import division
@@ -12,6 +15,8 @@ import matplotlib.pyplot as plt
 import cPickle, os
 import model_rates as mr
 
+
+#read all the files in the folder
 fnames = []
 
 for file in os.listdir("data_files"):
@@ -19,22 +24,16 @@ for file in os.listdir("data_files"):
         fnames.append(file)
 
 
+#Open the specific file
 myfile = fnames[-1]
-
 ext = '_alpha_'+str( myfile[-11] )
-
 pkl_file = open(os.path.join( 'data_files' , myfile ) , 'rb')
-
 data = cPickle.load( pkl_file )        
 pkl_file.close()
 
 a = []
 # Total variance norm. See Gibbs and Su (2009) for the definition.
 tv_norm = np.zeros( len(data) )
-var_norm = np.zeros( len(data) )
-
-sup_norm = np.zeros( len(data) )
-max_norm = np.zeros( len(data) )
 
 
 N = len(data[0][-1])
@@ -42,14 +41,11 @@ dx = ( mr.x1 - mr.x0 ) / N
 
 for cnum in range(len(data)):
     
-    a.append( data[cnum][0] )    
-    tv_norm[cnum] = np.sum ( np.abs( data[cnum][-2]-data[cnum][-1] ) ) * (dx**2) 
-    var_norm[cnum] = np.max (  np.sum(  np.abs( data[cnum][-2]-data[cnum][-1] ) , axis=1 ) ) * dx
-    sup_norm[cnum] =  np.sum( np.max (  np.abs ( data[cnum][-2]-data[cnum][-1] ) , axis=1 ) ) *dx
-    max_norm[cnum] =  np.max (  np.abs ( data[cnum][-2]-data[cnum][-1] ) )
+    a.append( data[cnum][0] )  
+    #Compute total variation norm
+    tv_norm[cnum] =  np.sum( np.max (  np.abs ( data[cnum][-2]-data[cnum][-1] ) , axis=1 ) ) *dx
     
 a = np.asarray( a )
-tv_norm = sup_norm
 
 min_ind = np.argmin( tv_norm ) 
 
@@ -59,9 +55,19 @@ f_init  = data[ min_ind ][-3]
 
 
 plt.close('all')
-my_cmap = plt.get_cmap('Set2')
+
+
+
+
+#==============================================================================
+# plot of approximate conditional measure (cdf) 
+#==============================================================================
+
 
 fig1 = plt.figure(1)
+
+#Colormap for the imshow plots
+my_cmap = plt.get_cmap('Set2')
 
 plt.title('$F_{30} (x,\ y)$', fontsize=20, y=1.04)
 plt.xlabel('$x$', fontsize=20)
@@ -75,6 +81,11 @@ cbar_ax = fig1.add_axes([0.85, 0.13, 0.03, 0.75])
 plt.colorbar(cax=cbar_ax)
 
 
+
+#==============================================================================
+# plot of true conditional measure (cdf)
+#==============================================================================
+
 fig2 = plt.figure(2)
 
 plt.title('$F_{0} (x,\ y)$', fontsize=20, y=1.04)
@@ -87,6 +98,14 @@ plt.imshow( np.flipud(f_true), interpolation='nearest', cmap=my_cmap , \
 
 cbar_ax = fig2.add_axes([0.85, 0.13, 0.03, 0.75])
 plt.colorbar(cax=cbar_ax)
+
+
+
+
+#==============================================================================
+#  Error between true and fit
+#==============================================================================
+
 
 fig3 = plt.figure(3)
 
@@ -106,6 +125,9 @@ plt.xlabel('$x$', fontsize=20)
 plt.ylabel('$y$', fontsize=20)
 
 
+#==============================================================================
+# Error with respect to t_f
+#==============================================================================
 
 plt.figure(4)
 
@@ -119,6 +141,13 @@ plt.xlabel( '$\sigma$', fontsize=20 )
 
 fig_name = 'noise_error'+ext+'.png'
 plt.savefig( os.path.join( 'images' , fig_name ) , dpi=400 , bbox_inches='tight' ) 
+
+
+
+
+#==============================================================================
+# plot of cdf for fixed y
+#==============================================================================
 
 
 f, ax = plt.subplots(2, sharex=True)

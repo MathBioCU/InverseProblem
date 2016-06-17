@@ -1,25 +1,36 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sun Aug 30 17:04:00 2015
+Created on May 10, 2016
 
-@author: Inom
+@author: Inom Mirzaev
+
+Simulates the forward problem and plots the results.
+Uses the rates specified in model_rates.py file.
 """
 
 from __future__ import division
 
 import numpy as np
 import matplotlib.pyplot as plt
-import cPickle, os
+import os
 import model_rates as mr
 
-from scipy.integrate import quad, odeint
+from scipy.integrate import odeint
 from functools import partial
 
+
+#Extension to be attached to the output file
 ext = '_alpha_'+str( mr.a )
 
 
 plt.close('all')
-fig = plt.figure( 0 )
+
+
+#==============================================================================
+# Simulations of the forwards problem
+#==============================================================================
+
+fig = plt.figure( 1 )
 
 ax = fig.add_subplot(111)
 
@@ -47,6 +58,9 @@ fig_name = 'simulation'+ext+'.png'
 plt.savefig( os.path.join( 'images' , fig_name ) , dpi=400 , bbox_inches='tight' )
 
 
+#==============================================================================
+# Plot of the Gamma (pdf) and F (cdf) for fixed values of y 
+#==============================================================================
 f, ax = plt.subplots(2, sharex=True)
 
 x = mr.nu[:-1]
@@ -107,7 +121,10 @@ for ndim in range(len(dimens)):
     conv_error = np.append( conv_error, L1_error ) 
      
 
-# Generates Meshsize vs Absolute error plot
+#==============================================================================
+# Generates error plot for the forward simulation.
+#==============================================================================
+
 fig = plt.figure(3)
 ax = fig.add_subplot(111)
 
